@@ -6,6 +6,40 @@
   <title>写日记 — LENNOX's Diary</title>
   <meta name="robots" content="noindex">
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .auto-fields {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.4rem;
+      margin: 1rem 0 1.5rem;
+      display: none;
+    }
+    .auto-fields .field-row {
+      display: flex;
+      gap: 0.6rem;
+      margin-bottom: 0.5rem;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+    .auto-fields .field-label {
+      font-family: var(--font-display);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      min-width: 3em;
+    }
+    .auto-fields .field-value {
+      font-size: 0.88rem;
+      color: var(--text-primary);
+      word-break: break-all;
+    }
+    .auto-fields .field-value .tag {
+      margin-right: 0.3rem;
+    }
+    .parsed-ok { border-left: 3px solid #4caf50 !important; }
+    .parsed-fail { border-left: 3px solid var(--accent) !important; }
+  </style>
 </head>
 <body>
 
@@ -21,7 +55,7 @@
 
   <div class="editor-container">
     <h1 class="page-heading">写日记</h1>
-    <p class="page-subtitle">粘贴你的日记文本，自动转换为结构化 HTML 并发布到博客。</p>
+    <p class="page-subtitle">把整篇日记 TXT 粘贴进来，日期、标题、标签会自动提取。粘贴完直接点发布。</p>
 
     <!-- GitHub Settings (collapsible) -->
     <details class="settings-panel" id="settingsPanel">
@@ -52,49 +86,40 @@
       </div>
     </details>
 
-    <!-- Entry metadata -->
-    <div class="editor-row">
-      <div class="editor-section">
-        <label for="entryDate">日期</label>
-        <input type="date" class="editor-input" id="entryDate">
+    <!-- Auto-extracted fields display -->
+    <div class="auto-fields" id="autoFields">
+      <div class="field-row">
+        <span class="field-label">日期</span>
+        <span class="field-value" id="parsedDate">—</span>
       </div>
-      <div class="editor-section">
-        <label for="entryTitle">标题</label>
-        <input type="text" class="editor-input" id="entryTitle" placeholder="今天的日记标题">
+      <div class="field-row">
+        <span class="field-label">标题</span>
+        <span class="field-value" id="parsedTitle">—</span>
       </div>
-    </div>
-
-    <div class="editor-row">
-      <div class="editor-section">
-        <label for="entryTags">标签（逗号分隔）</label>
-        <input type="text" class="editor-input" id="entryTags" placeholder="注意力管理, AI开发, 复盘">
+      <div class="field-row">
+        <span class="field-label">标签</span>
+        <span class="field-value" id="parsedTags">—</span>
       </div>
-      <div class="editor-section">
-        <label for="entrySummary">摘要（一句话）</label>
-        <input type="text" class="editor-input" id="entrySummary" placeholder="今天最核心的一句话总结">
+      <div class="field-row">
+        <span class="field-label">摘要</span>
+        <span class="field-value" id="parsedSummary">—</span>
       </div>
     </div>
 
-    <!-- Main text area -->
+    <!-- Single textarea -->
     <div class="editor-section">
-      <label for="entryContent">日记正文（支持 Markdown 格式）</label>
-      <textarea class="editor-textarea" id="entryContent" placeholder="把你的日记文本粘贴到这里…
+      <label for="entryContent">把整篇日记粘贴到这里（自动提取日期、标题、标签）</label>
+      <textarea class="editor-textarea" id="entryContent" style="min-height:500px;" placeholder="直接把 TXT 全文粘贴到这里…
 
-支持的格式：
-# 一级标题
-## 二级标题
-### 三级标题
-- 列表项
-> 引用块
-**粗体**
-普通段落直接写
+编辑器会自动从第一行提取标题和日期，
+从「主题关键词」那行提取标签。
 
-洞察卡会自动识别 ### Insight-XX 格式并特殊渲染。"></textarea>
+你什么都不用手动填，粘贴完点发布就行。"></textarea>
     </div>
 
     <div class="btn-group">
+      <button class="btn btn-primary" onclick="publish()" style="font-size:1rem;padding:0.8rem 2.5rem;">发布到 GitHub</button>
       <button class="btn btn-secondary" onclick="preview()">预览</button>
-      <button class="btn btn-primary" onclick="publish()">发布到 GitHub</button>
       <button class="btn btn-secondary" onclick="downloadHTML()">下载 HTML</button>
     </div>
 
@@ -113,7 +138,7 @@
 
   <script>
     // ========================================
-    // Settings persistence (localStorage)
+    // Settings persistence
     // ========================================
     function loadSettings() {
       const fields = ['ghToken', 'ghOwner', 'ghRepo', 'ghBranch'];
@@ -121,10 +146,6 @@
         const val = localStorage.getItem('diary_' + id);
         if (val) document.getElementById(id).value = val;
       });
-      // Auto-set today's date
-      const today = new Date().toISOString().split('T')[0];
-      document.getElementById('entryDate').value = today;
-      // If settings exist, collapse the panel
       if (localStorage.getItem('diary_ghToken')) {
         document.getElementById('settingsPanel').removeAttribute('open');
       }
@@ -143,13 +164,117 @@
     loadSettings();
 
     // ========================================
-    // Markdown-like → HTML converter
+    // Auto-parse: extract date, title, tags, summary
+    // ========================================
+    let parsedData = { date: '', title: '', tags: '', summary: '' };
+
+    function autoParse(text) {
+      const lines = text.split('\n');
+      let date = '';
+      let title = '';
+      let tags = '';
+      let summary = '';
+
+      const firstLine = lines[0] || '';
+
+      // --- Date ---
+      const datePatterns = [
+        /(\d{4})-(\d{1,2})-(\d{1,2})/,
+        /(\d{4})\/(\d{1,2})\/(\d{1,2})/,
+        /(\d{4})年(\d{1,2})月(\d{1,2})日/
+      ];
+      // Try first line
+      for (const pat of datePatterns) {
+        const m = firstLine.match(pat);
+        if (m) { date = `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`; break; }
+      }
+      // Fallback: 元信息 section
+      if (!date) {
+        for (const line of lines.slice(0, 30)) {
+          if (line.includes('原始记录时间') || line.includes('原始发生日期')) {
+            for (const pat of datePatterns) {
+              const m = line.match(pat);
+              if (m) { date = `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`; break; }
+            }
+            if (date) break;
+          }
+        }
+      }
+
+      // --- Title ---
+      const titleMatch = firstLine.match(/^#\s*diary[｜|]\s*(.+)/i);
+      if (titleMatch) {
+        title = titleMatch[1]
+          .replace(/[\(（]\s*\d{4}[-\/]\d{1,2}[-\/]\d{1,2}[^)）]*[\)）]/g, '')
+          .replace(/整合版\s*v[\d.]+.*/g, '')
+          .replace(/[\(（]含补丁说明[\)）]/g, '')
+          .trim()
+          .replace(/[；;，,。.、\s]+$/, '')
+          .trim();
+      }
+
+      // --- Tags from 主题关键词 ---
+      for (const line of lines.slice(0, 40)) {
+        if (line.includes('主题关键词')) {
+          const tagMatch = line.match(/[：:]\s*(.+)/);
+          if (tagMatch) {
+            tags = tagMatch[1].replace(/#/g, '').split(/\s+/).filter(t => t.trim()).join(', ');
+          }
+          break;
+        }
+      }
+
+      // --- Summary: first substantial paragraph in section 1 ---
+      let inSection1 = false;
+      for (const line of lines) {
+        if (line.match(/^##\s*1[）\)]/)) { inSection1 = true; continue; }
+        if (inSection1 && line.match(/^##\s*[2-9]/)) break;
+        if (inSection1 && line.trim().length > 20 && !line.startsWith('#') && !line.startsWith('*') && !line.startsWith('-') && !line.startsWith('>')) {
+          summary = line.trim().substring(0, 120);
+          if (line.trim().length > 120) summary += '…';
+          break;
+        }
+      }
+      if (!summary) {
+        for (const line of lines) {
+          if (line.trim().startsWith('> ') && line.trim().length > 10) {
+            summary = line.trim().replace(/^>\s*/, '').replace(/^[""]/, '').replace(/[""]$/, '').substring(0, 120);
+            break;
+          }
+        }
+      }
+
+      parsedData = { date, title, tags, summary };
+
+      // Update UI
+      const af = document.getElementById('autoFields');
+      af.style.display = 'block';
+      document.getElementById('parsedDate').textContent = date || '（未识别）';
+      document.getElementById('parsedTitle').textContent = title || '（未识别）';
+      document.getElementById('parsedSummary').textContent = summary || '（自动生成）';
+
+      if (tags) {
+        document.getElementById('parsedTags').innerHTML = tags.split(',').map(t =>
+          `<span class="tag">${t.trim()}</span>`
+        ).join(' ');
+      } else {
+        document.getElementById('parsedTags').textContent = '（未识别）';
+      }
+
+      af.className = 'auto-fields ' + (date && title ? 'parsed-ok' : 'parsed-fail');
+    }
+
+    // Auto-parse on input
+    document.getElementById('entryContent').addEventListener('input', function() {
+      if (this.value.trim().length > 50) autoParse(this.value);
+    });
+
+    // ========================================
+    // Markdown → HTML
     // ========================================
     function markdownToHTML(text) {
       const lines = text.split('\n');
       let html = '';
-      let inList = false;
-      let inBlockquote = false;
       let listItems = [];
       let bqItems = [];
 
@@ -158,133 +283,74 @@
           html += '<ul>\n' + listItems.map(li => `  <li>${li}</li>`).join('\n') + '\n</ul>\n';
           listItems = [];
         }
-        inList = false;
       }
-
-      function flushBlockquote() {
+      function flushBQ() {
         if (bqItems.length > 0) {
           html += '<blockquote>\n' + bqItems.map(bq => `  <p>${bq}</p>`).join('\n') + '\n</blockquote>\n';
           bqItems = [];
         }
-        inBlockquote = false;
       }
-
-      function inlineFormat(text) {
-        // Bold
+      function fmt(text) {
         text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        // Inline code
         text = text.replace(/`(.+?)`/g, '<code>$1</code>');
         return text;
       }
 
       for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
-        let trimmed = line.trim();
+        let trimmed = lines[i].trim();
+        if (trimmed === '') { flushList(); flushBQ(); continue; }
+        if (trimmed === '---') { flushList(); flushBQ(); html += '<div class="section-divider">· · ·</div>\n'; continue; }
 
-        // Empty line
-        if (trimmed === '') {
-          flushList();
-          flushBlockquote();
-          continue;
-        }
-
-        // Section divider
-        if (trimmed === '---') {
-          flushList();
-          flushBlockquote();
-          html += '<div class="section-divider">· · ·</div>\n';
-          continue;
-        }
-
-        // Headings
-        if (trimmed.startsWith('### Insight-') || trimmed.startsWith('### Insight-')) {
-          flushList();
-          flushBlockquote();
-          // Start insight card - collect until next heading or empty lines
+        // Insight cards
+        if (trimmed.startsWith('### Insight-')) {
+          flushList(); flushBQ();
           let insightTitle = trimmed.replace(/^###\s*/, '');
           let insightBody = '';
           i++;
           while (i < lines.length) {
-            let nextLine = lines[i].trim();
-            if (nextLine === '' && i + 1 < lines.length && (lines[i+1].trim().startsWith('#') || lines[i+1].trim().startsWith('### Insight'))) break;
-            if (nextLine.startsWith('#')) { i--; break; }
-            if (nextLine === '') { i++; continue; }
-            // Classify insight lines
-            if (nextLine.startsWith('* **结构**') || nextLine.startsWith('- **结构**')) {
-              insightBody += `<p class="structure">${inlineFormat(nextLine.replace(/^[\*\-]\s*/, ''))}</p>\n`;
-            } else if (nextLine.startsWith('* **关键点**') || nextLine.startsWith('- **关键点**')) {
-              insightBody += `<p class="key-point">${inlineFormat(nextLine.replace(/^[\*\-]\s*/, ''))}</p>\n`;
-            } else if (nextLine.startsWith('* **后果**') || nextLine.startsWith('- **后果**') ||
-                       nextLine.startsWith('* **结论') || nextLine.startsWith('- **结论')) {
-              insightBody += `<p class="conclusion">${inlineFormat(nextLine.replace(/^[\*\-]\s*/, ''))}</p>\n`;
-            } else {
-              insightBody += `<p>${inlineFormat(nextLine.replace(/^[\*\-]\s*/, ''))}</p>\n`;
-            }
+            let nl = lines[i].trim();
+            if (nl === '' && i+1 < lines.length && (lines[i+1].trim().startsWith('#'))) break;
+            if (nl.startsWith('#')) { i--; break; }
+            if (nl === '') { i++; continue; }
+            let cleaned = nl.replace(/^[\*\-]\s*/, '');
+            if (nl.match(/^\*\s*\*\*结构\*\*/) || nl.match(/^-\s*\*\*结构\*\*/))
+              insightBody += `<p class="structure">${fmt(cleaned)}</p>\n`;
+            else if (nl.match(/^\*\s*\*\*关键点\*\*/) || nl.match(/^-\s*\*\*关键点\*\*/))
+              insightBody += `<p class="key-point">${fmt(cleaned)}</p>\n`;
+            else if (nl.match(/^\*\s*\*\*(后果|结论)/) || nl.match(/^-\s*\*\*(后果|结论)/))
+              insightBody += `<p class="conclusion">${fmt(cleaned)}</p>\n`;
+            else
+              insightBody += `<p>${fmt(cleaned)}</p>\n`;
             i++;
           }
-          html += `<div class="insight-card">\n  <h3>${inlineFormat(insightTitle)}</h3>\n  ${insightBody}</div>\n`;
+          html += `<div class="insight-card">\n  <h3>${fmt(insightTitle)}</h3>\n  ${insightBody}</div>\n`;
           continue;
         }
 
-        if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
-          flushList(); flushBlockquote();
-          // Skip top-level title (used as article title instead)
-          continue;
-        }
-        if (trimmed.startsWith('## ')) {
-          flushList(); flushBlockquote();
-          html += `<h2>${inlineFormat(trimmed.replace(/^##\s*/, ''))}</h2>\n`;
-          continue;
-        }
-        if (trimmed.startsWith('### ')) {
-          flushList(); flushBlockquote();
-          html += `<h3>${inlineFormat(trimmed.replace(/^###\s*/, ''))}</h3>\n`;
-          continue;
-        }
+        if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) { flushList(); flushBQ(); continue; }
+        if (trimmed.startsWith('## ')) { flushList(); flushBQ(); html += `<h2>${fmt(trimmed.replace(/^##\s*/, ''))}</h2>\n`; continue; }
+        if (trimmed.startsWith('### ')) { flushList(); flushBQ(); html += `<h3>${fmt(trimmed.replace(/^###\s*/, ''))}</h3>\n`; continue; }
+        if (trimmed.startsWith('> ')) { flushList(); bqItems.push(fmt(trimmed.replace(/^>\s*/, ''))); continue; }
+        if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) { flushBQ(); listItems.push(fmt(trimmed.replace(/^[\*\-]\s*/, ''))); continue; }
 
-        // Blockquote
-        if (trimmed.startsWith('> ')) {
-          flushList();
-          inBlockquote = true;
-          bqItems.push(inlineFormat(trimmed.replace(/^>\s*/, '')));
-          continue;
-        }
-
-        // List items
-        if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
-          flushBlockquote();
-          inList = true;
-          listItems.push(inlineFormat(trimmed.replace(/^[\*\-]\s*/, '')));
-          continue;
-        }
-
-        // Regular paragraph
-        flushList();
-        flushBlockquote();
-        html += `<p>${inlineFormat(trimmed)}</p>\n`;
+        flushList(); flushBQ();
+        html += `<p>${fmt(trimmed)}</p>\n`;
       }
-
-      flushList();
-      flushBlockquote();
+      flushList(); flushBQ();
       return html;
     }
 
     // ========================================
-    // Generate full HTML page for entry
+    // Generate full HTML page
     // ========================================
     function generateEntryHTML(date, title, tags, summary, bodyHTML) {
       const tagsArray = tags.split(/[,，]/).map(t => t.trim()).filter(Boolean);
-      const tagsMeta = tagsArray.join(', ');
       const tagsHTML = tagsArray.map(t => `          <span class="tag" itemprop="keywords">${t}</span>`).join('\n');
       const schemaJSON = JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "BlogPosting",
-        "headline": title,
-        "datePublished": date,
+        "@context": "https://schema.org", "@type": "BlogPosting",
+        "headline": title, "datePublished": date,
         "author": { "@type": "Person", "name": "LENNOX" },
-        "keywords": tagsArray,
-        "inLanguage": "zh-CN",
-        "description": summary
+        "keywords": tagsArray, "inLanguage": "zh-CN", "description": summary
       }, null, 2);
 
       return `<!DOCTYPE html>
@@ -294,7 +360,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${date} — ${title} — LENNOX's Diary</title>
   <meta name="description" content="${summary}">
-  <meta name="keywords" content="${tagsMeta}">
+  <meta name="keywords" content="${tagsArray.join(', ')}">
   <meta name="author" content="LENNOX">
   <meta name="robots" content="index, follow">
   <script type="application/ld+json">
@@ -306,10 +372,7 @@
   <header class="site-header">
     <div class="inner">
       <a href="/" class="site-title">LENNOX<span>'s</span> Diary</a>
-      <nav class="site-nav">
-        <a href="/">日记</a>
-        <a href="/editor.html">写日记</a>
-      </nav>
+      <nav class="site-nav"><a href="/">日记</a><a href="/editor.html">写日记</a></nav>
     </div>
   </header>
   <main class="content-wrapper">
@@ -318,9 +381,7 @@
       <header class="article-header">
         <time class="entry-date" itemprop="datePublished" datetime="${date}">${date}</time>
         <h1 class="article-title" itemprop="headline">${title}</h1>
-        <div class="article-meta-tags">
-${tagsHTML}
-        </div>
+        <div class="article-meta-tags">\n${tagsHTML}\n        </div>
         <meta itemprop="author" content="LENNOX">
       </header>
       <div class="article-body" itemprop="articleBody">
@@ -328,9 +389,7 @@ ${tagsHTML}
       </div>
     </article>
   </main>
-  <footer class="site-footer">
-    LENNOX's Diary · Hosted on Wasmer Edge
-  </footer>
+  <footer class="site-footer">LENNOX's Diary · Hosted on Wasmer Edge</footer>
 </body>
 </html>`;
     }
@@ -339,43 +398,32 @@ ${tagsHTML}
     // Preview
     // ========================================
     function preview() {
-      const content = document.getElementById('entryContent').value;
-      const bodyHTML = markdownToHTML(content);
-      document.getElementById('previewContent').innerHTML = bodyHTML;
+      const c = document.getElementById('entryContent').value;
+      if (!c.trim()) { showStatus('请先粘贴日记内容', 'error'); return; }
+      autoParse(c);
+      document.getElementById('previewContent').innerHTML = markdownToHTML(c);
       document.getElementById('previewPanel').style.display = 'block';
       document.getElementById('previewPanel').scrollIntoView({ behavior: 'smooth' });
     }
 
     // ========================================
-    // Download HTML file locally
+    // Download
     // ========================================
     function downloadHTML() {
-      const date = document.getElementById('entryDate').value;
-      const title = document.getElementById('entryTitle').value;
-      const tags = document.getElementById('entryTags').value;
-      const summary = document.getElementById('entrySummary').value;
-      const content = document.getElementById('entryContent').value;
-
-      if (!date || !title || !content) {
-        showStatus('请填写日期、标题和正文', 'error');
-        return;
-      }
-
-      const bodyHTML = markdownToHTML(content);
-      const fullHTML = generateEntryHTML(date, title, tags, summary, bodyHTML);
-
+      const c = document.getElementById('entryContent').value;
+      if (!c.trim()) { showStatus('请先粘贴日记内容', 'error'); return; }
+      autoParse(c);
+      const { date, title, tags, summary } = parsedData;
+      if (!date || !title) { showStatus('无法识别日期或标题，请检查格式', 'error'); return; }
+      const fullHTML = generateEntryHTML(date, title, tags, summary, markdownToHTML(c));
       const blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${date}.html`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `${date}.html`; a.click();
       showStatus(`✓ 已下载 ${date}.html`, 'success');
     }
 
     // ========================================
-    // Publish to GitHub (creates entry + updates manifest)
+    // Publish to GitHub
     // ========================================
     async function publish() {
       const token = document.getElementById('ghToken').value || localStorage.getItem('diary_ghToken');
@@ -389,16 +437,12 @@ ${tagsHTML}
         return;
       }
 
-      const date = document.getElementById('entryDate').value;
-      const title = document.getElementById('entryTitle').value;
-      const tags = document.getElementById('entryTags').value;
-      const summary = document.getElementById('entrySummary').value;
       const content = document.getElementById('entryContent').value;
+      if (!content.trim()) { showStatus('请先粘贴日记内容', 'error'); return; }
 
-      if (!date || !title || !content) {
-        showStatus('请填写日期、标题和正文', 'error');
-        return;
-      }
+      autoParse(content);
+      const { date, title, tags, summary } = parsedData;
+      if (!date || !title) { showStatus('无法识别日期或标题，请确认第一行格式', 'error'); return; }
 
       showStatus('正在发布…', 'info');
 
@@ -408,99 +452,53 @@ ${tagsHTML}
         const fileName = `${date}.html`;
         const filePath = `public/entries/${fileName}`;
         const apiBase = `https://api.github.com/repos/${owner}/${repo}/contents`;
-        const headers = {
-          'Authorization': `token ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/vnd.github.v3+json'
-        };
+        const headers = { 'Authorization': `token ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/vnd.github.v3+json' };
 
-        // Step 1: Upload the entry HTML file
-        // Check if file exists (to get SHA for update)
+        // Upload entry
         let sha = null;
         try {
           const existing = await fetch(`${apiBase}/${filePath}?ref=${branch}`, { headers });
-          if (existing.ok) {
-            const data = await existing.json();
-            sha = data.sha;
-          }
-        } catch(e) { /* file doesn't exist yet, fine */ }
+          if (existing.ok) sha = (await existing.json()).sha;
+        } catch(e) {}
 
-        const entryPayload = {
-          message: `diary: add ${date} - ${title}`,
-          content: btoa(unescape(encodeURIComponent(fullHTML))),
-          branch: branch
-        };
-        if (sha) entryPayload.sha = sha;
+        const payload = { message: `diary: ${date} - ${title}`, content: btoa(unescape(encodeURIComponent(fullHTML))), branch };
+        if (sha) payload.sha = sha;
 
-        const entryResp = await fetch(`${apiBase}/${filePath}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(entryPayload)
-        });
+        const resp = await fetch(`${apiBase}/${filePath}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+        if (!resp.ok) throw new Error(`上传失败: ${(await resp.json()).message}`);
 
-        if (!entryResp.ok) {
-          const err = await entryResp.json();
-          throw new Error(`上传日记文件失败: ${err.message}`);
-        }
-
-        // Step 2: Update manifest.json
-        const manifestPath = 'public/entries/manifest.json';
+        // Update manifest
+        const mPath = 'public/entries/manifest.json';
         let manifest = { site: { title: "LENNOX's Diary", description: "结构化每日复盘与成长记录", author: "LENNOX", language: "zh-CN" }, entries: [] };
-        let manifestSha = null;
-
+        let mSha = null;
         try {
-          const mResp = await fetch(`${apiBase}/${manifestPath}?ref=${branch}`, { headers });
-          if (mResp.ok) {
-            const mData = await mResp.json();
-            manifestSha = mData.sha;
-            manifest = JSON.parse(decodeURIComponent(escape(atob(mData.content.replace(/\n/g, '')))));
-          }
-        } catch(e) { /* use default manifest */ }
+          const mr = await fetch(`${apiBase}/${mPath}?ref=${branch}`, { headers });
+          if (mr.ok) { const md = await mr.json(); mSha = md.sha; manifest = JSON.parse(decodeURIComponent(escape(atob(md.content.replace(/\n/g, ''))))); }
+        } catch(e) {}
 
         const tagsArray = tags.split(/[,，]/).map(t => t.trim()).filter(Boolean);
-        const newEntry = { date, title, file: fileName, tags: tagsArray, summary };
-
-        // Remove existing entry for same date if exists
         manifest.entries = manifest.entries.filter(e => e.date !== date);
-        manifest.entries.push(newEntry);
-        // Sort newest first
+        manifest.entries.push({ date, title, file: fileName, tags: tagsArray, summary });
         manifest.entries.sort((a, b) => b.date.localeCompare(a.date));
 
-        const manifestPayload = {
-          message: `diary: update manifest for ${date}`,
-          content: btoa(unescape(encodeURIComponent(JSON.stringify(manifest, null, 2)))),
-          branch: branch
-        };
-        if (manifestSha) manifestPayload.sha = manifestSha;
+        const mPayload = { message: `diary: update manifest for ${date}`, content: btoa(unescape(encodeURIComponent(JSON.stringify(manifest, null, 2)))), branch };
+        if (mSha) mPayload.sha = mSha;
 
-        const mUpdateResp = await fetch(`${apiBase}/${manifestPath}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(manifestPayload)
-        });
+        const mr2 = await fetch(`${apiBase}/${mPath}`, { method: 'PUT', headers, body: JSON.stringify(mPayload) });
+        if (!mr2.ok) throw new Error(`更新索引失败: ${(await mr2.json()).message}`);
 
-        if (!mUpdateResp.ok) {
-          const err = await mUpdateResp.json();
-          throw new Error(`更新 manifest 失败: ${err.message}`);
-        }
-
-        showStatus(`✓ 发布成功！${date} 的日记已提交到 GitHub。Wasmer 将自动重新部署。`, 'success');
-
+        showStatus(`✓ 发布成功！「${title}」(${date}) 已上线`, 'success');
       } catch (err) {
-        showStatus(`✗ 发布失败: ${err.message}`, 'error');
+        showStatus(`✗ ${err.message}`, 'error');
         console.error(err);
       }
     }
 
-    // ========================================
-    // Status message helper
-    // ========================================
     function showStatus(msg, type) {
       const el = document.getElementById('statusMsg');
       el.textContent = msg;
       el.className = 'status-msg ' + type;
     }
   </script>
-
 </body>
 </html>
