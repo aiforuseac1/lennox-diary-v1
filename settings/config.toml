@@ -1,0 +1,6 @@
+[general]
+host = "::"
+port = 8080
+root = "/public"
+log-level = "info"
+directory-listing = false

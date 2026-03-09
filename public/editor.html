@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>写日记 — LENNOX's Diary</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="inner">
+      <a href="/" class="site-title">LENNOX<span>'s</span> Diary</a>
+      <nav class="site-nav">
+        <a href="/">日记</a>
+        <a href="/editor.html" class="active">写日记</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="editor-container">
+    <h1 class="page-heading">写日记</h1>
+    <p class="page-subtitle">粘贴你的日记文本，自动转换为结构化 HTML 并发布到博客。</p>
+
+    <!-- GitHub Settings (collapsible) -->
+    <details class="settings-panel" id="settingsPanel">
+      <summary>⚙ GitHub 连接设置（首次使用需配置）</summary>
+      <div class="settings-inner">
+        <div class="editor-section">
+          <label for="ghToken">GitHub Personal Access Token</label>
+          <input type="password" class="editor-input" id="ghToken" placeholder="ghp_xxxxxxxxxxxx">
+        </div>
+        <div class="editor-row">
+          <div class="editor-section">
+            <label for="ghOwner">GitHub 用户名</label>
+            <input type="text" class="editor-input" id="ghOwner" placeholder="your-github-username">
+          </div>
+          <div class="editor-section">
+            <label for="ghRepo">仓库名</label>
+            <input type="text" class="editor-input" id="ghRepo" placeholder="lennox-diary">
+          </div>
+        </div>
+        <div class="editor-section">
+          <label for="ghBranch">分支（默认 main）</label>
+          <input type="text" class="editor-input" id="ghBranch" placeholder="main" value="main">
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="saveSettings()">保存设置</button>
+          <span id="settingsStatus" style="font-size:0.85rem;color:var(--text-muted);align-self:center;"></span>
+        </div>
+      </div>
+    </details>
+
+    <!-- Entry metadata -->
+    <div class="editor-row">
+      <div class="editor-section">
+        <label for="entryDate">日期</label>
+        <input type="date" class="editor-input" id="entryDate">
+      </div>
+      <div class="editor-section">
+        <label for="entryTitle">标题</label>
+        <input type="text" class="editor-input" id="entryTitle" placeholder="今天的日记标题">
+      </div>
+    </div>
+
+    <div class="editor-row">
+      <div class="editor-section">
+        <label for="entryTags">标签（逗号分隔）</label>
+        <input type="text" class="editor-input" id="entryTags" placeholder="注意力管理, AI开发, 复盘">
+      </div>
+      <div class="editor-section">
+        <label for="entrySummary">摘要（一句话）</label>
+        <input type="text" class="editor-input" id="entrySummary" placeholder="今天最核心的一句话总结">
+      </div>
+    </div>
+
+    <!-- Main text area -->
+    <div class="editor-section">
+      <label for="entryContent">日记正文（支持 Markdown 格式）</label>
+      <textarea class="editor-textarea" id="entryContent" placeholder="把你的日记文本粘贴到这里…
+
+支持的格式：
+# 一级标题
+## 二级标题
+### 三级标题
+- 列表项
+> 引用块
+**粗体**
+普通段落直接写
+
+洞察卡会自动识别 ### Insight-XX 格式并特殊渲染。"></textarea>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-secondary" onclick="preview()">预览</button>
+      <button class="btn btn-primary" onclick="publish()">发布到 GitHub</button>
+      <button class="btn btn-secondary" onclick="downloadHTML()">下载 HTML</button>
+    </div>
+
+    <div id="statusMsg" class="status-msg"></div>
+
+    <!-- Preview area -->
+    <div class="preview-panel" id="previewPanel" style="display:none;">
+      <h2 style="font-family:var(--font-display);font-size:1.1rem;margin-bottom:1rem;color:var(--text-muted);">预览</h2>
+      <div id="previewContent" class="article-body"></div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    LENNOX's Diary · Hosted on Wasmer Edge
+  </footer>
+
+  <script>
+    // ========================================
+    // Settings persistence (localStorage)
+    // ========================================
+    function loadSettings() {
+      const fields = ['ghToken', 'ghOwner', 'ghRepo', 'ghBranch'];
+      fields.forEach(id => {
+        const val = localStorage.getItem('diary_' + id);
+        if (val) document.getElementById(id).value = val;
+      });
+      // Auto-set today's date
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('entryDate').value = today;
+      // If settings exist, collapse the panel
+      if (localStorage.getItem('diary_ghToken')) {
+        document.getElementById('settingsPanel').removeAttribute('open');
+      }
+    }
+
+    function saveSettings() {
+      const fields = ['ghToken', 'ghOwner', 'ghRepo', 'ghBranch'];
+      fields.forEach(id => {
+        localStorage.setItem('diary_' + id, document.getElementById(id).value);
+      });
+      document.getElementById('settingsStatus').textContent = '✓ 已保存';
+      document.getElementById('settingsPanel').removeAttribute('open');
+      setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; }, 2000);
+    }
+
+    loadSettings();
+
+    // ========================================
+    // Markdown-like → HTML converter
+    // ========================================
+    function markdownToHTML(text) {
+      const lines = text.split('\n');
+      let html = '';
+      let inList = false;
+      let inBlockquote = false;
+      let listItems = [];
+      let bqItems = [];
+
+      function flushList() {
+        if (listItems.length > 0) {
+          html += '<ul>\n' + listItems.map(li => `  <li>${li}</li>`).join('\n') + '\n</ul>\n';
+          listItems = [];
+        }
+        inList = false;
+      }
+
+      function flushBlockquote() {
+        if (bqItems.length > 0) {
+          html += '<blockquote>\n' + bqItems.map(bq => `  <p>${bq}</p>`).join('\n') + '\n</blockquote>\n';
+          bqItems = [];
+        }
+        inBlockquote = false;
+      }
+
+      function inlineFormat(text) {
+        // Bold
+        text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        // Inline code
+        text = text.replace(/`(.+?)`/g, '<code>$1</code>');
+        return text;
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        let trimmed = line.trim();
+
+        // Empty line
+        if (trimmed === '') {
+          flushList();
+          flushBlockquote();
+          continue;
+        }
+
+        // Section divider
+        if (trimmed === '---') {
+          flushList();
+          flushBlockquote();
+          html += '<div class="section-divider">· · ·</div>\n';
+          continue;
+        }
+
+        // Headings
+        if (trimmed.startsWith('### Insight-') || trimmed.startsWith('### Insight-')) {
+          flushList();
+          flushBlockquote();
+          // Start insight card - collect until next heading or empty lines
+          let insightTitle = trimmed.replace(/^###\s*/, '');
+          let insightBody = '';
+          i++;
+          while (i < lines.length) {
+            let nextLine = lines[i].trim();
+            if (nextLine === '' && i + 1 < lines.length && (lines[i+1].trim().startsWith('#') || lines[i+1].trim().startsWith('### Insight'))) break;
+            if (nextLine.startsWith('#')) { i--; break; }
+            if (nextLine === '') { i++; continue; }
+            // Classify insight lines
+            if (nextLine.startsWith('* **结构**') || nextLine.startsWith('- **结构**')) {
+              insightBody += `<p class="structure">${inlineFormat(nextLine.replace(/^[\*\-]\s*/, ''))}</p>\n`;
+            } else if (nextLine.startsWith('* **关键点**') || nextLine.startsWith('- **关键点**')) {
+              insightBody += `<p class="key-point">${inlineFormat(nextLine.replace(/^[\*\-]\s*/, ''))}</p>\n`;
+            } else if (nextLine.startsWith('* **后果**') || nextLine.startsWith('- **后果**') ||
+                       nextLine.startsWith('* **结论') || nextLine.startsWith('- **结论')) {
+              insightBody += `<p class="conclusion">${inlineFormat(nextLine.replace(/^[\*\-]\s*/, ''))}</p>\n`;
+            } else {
+              insightBody += `<p>${inlineFormat(nextLine.replace(/^[\*\-]\s*/, ''))}</p>\n`;
+            }
+            i++;
+          }
+          html += `<div class="insight-card">\n  <h3>${inlineFormat(insightTitle)}</h3>\n  ${insightBody}</div>\n`;
+          continue;
+        }
+
+        if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+          flushList(); flushBlockquote();
+          // Skip top-level title (used as article title instead)
+          continue;
+        }
+        if (trimmed.startsWith('## ')) {
+          flushList(); flushBlockquote();
+          html += `<h2>${inlineFormat(trimmed.replace(/^##\s*/, ''))}</h2>\n`;
+          continue;
+        }
+        if (trimmed.startsWith('### ')) {
+          flushList(); flushBlockquote();
+          html += `<h3>${inlineFormat(trimmed.replace(/^###\s*/, ''))}</h3>\n`;
+          continue;
+        }
+
+        // Blockquote
+        if (trimmed.startsWith('> ')) {
+          flushList();
+          inBlockquote = true;
+          bqItems.push(inlineFormat(trimmed.replace(/^>\s*/, '')));
+          continue;
+        }
+
+        // List items
+        if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+          flushBlockquote();
+          inList = true;
+          listItems.push(inlineFormat(trimmed.replace(/^[\*\-]\s*/, '')));
+          continue;
+        }
+
+        // Regular paragraph
+        flushList();
+        flushBlockquote();
+        html += `<p>${inlineFormat(trimmed)}</p>\n`;
+      }
+
+      flushList();
+      flushBlockquote();
+      return html;
+    }
+
+    // ========================================
+    // Generate full HTML page for entry
+    // ========================================
+    function generateEntryHTML(date, title, tags, summary, bodyHTML) {
+      const tagsArray = tags.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+      const tagsMeta = tagsArray.join(', ');
+      const tagsHTML = tagsArray.map(t => `          <span class="tag" itemprop="keywords">${t}</span>`).join('\n');
+      const schemaJSON = JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": title,
+        "datePublished": date,
+        "author": { "@type": "Person", "name": "LENNOX" },
+        "keywords": tagsArray,
+        "inLanguage": "zh-CN",
+        "description": summary
+      }, null, 2);
+
+      return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${date} — ${title} — LENNOX's Diary</title>
+  <meta name="description" content="${summary}">
+  <meta name="keywords" content="${tagsMeta}">
+  <meta name="author" content="LENNOX">
+  <meta name="robots" content="index, follow">
+  <script type="application/ld+json">
+  ${schemaJSON}
+  ${'<'}/script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="inner">
+      <a href="/" class="site-title">LENNOX<span>'s</span> Diary</a>
+      <nav class="site-nav">
+        <a href="/">日记</a>
+        <a href="/editor.html">写日记</a>
+      </nav>
+    </div>
+  </header>
+  <main class="content-wrapper">
+    <a href="/" class="back-link">← 返回日记列表</a>
+    <article itemscope itemtype="https://schema.org/BlogPosting">
+      <header class="article-header">
+        <time class="entry-date" itemprop="datePublished" datetime="${date}">${date}</time>
+        <h1 class="article-title" itemprop="headline">${title}</h1>
+        <div class="article-meta-tags">
+${tagsHTML}
+        </div>
+        <meta itemprop="author" content="LENNOX">
+      </header>
+      <div class="article-body" itemprop="articleBody">
+        ${bodyHTML}
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    LENNOX's Diary · Hosted on Wasmer Edge
+  </footer>
+</body>
+</html>`;
+    }
+
+    // ========================================
+    // Preview
+    // ========================================
+    function preview() {
+      const content = document.getElementById('entryContent').value;
+      const bodyHTML = markdownToHTML(content);
+      document.getElementById('previewContent').innerHTML = bodyHTML;
+      document.getElementById('previewPanel').style.display = 'block';
+      document.getElementById('previewPanel').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ========================================
+    // Download HTML file locally
+    // ========================================
+    function downloadHTML() {
+      const date = document.getElementById('entryDate').value;
+      const title = document.getElementById('entryTitle').value;
+      const tags = document.getElementById('entryTags').value;
+      const summary = document.getElementById('entrySummary').value;
+      const content = document.getElementById('entryContent').value;
+
+      if (!date || !title || !content) {
+        showStatus('请填写日期、标题和正文', 'error');
+        return;
+      }
+
+      const bodyHTML = markdownToHTML(content);
+      const fullHTML = generateEntryHTML(date, title, tags, summary, bodyHTML);
+
+      const blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${date}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus(`✓ 已下载 ${date}.html`, 'success');
+    }
+
+    // ========================================
+    // Publish to GitHub (creates entry + updates manifest)
+    // ========================================
+    async function publish() {
+      const token = document.getElementById('ghToken').value || localStorage.getItem('diary_ghToken');
+      const owner = document.getElementById('ghOwner').value || localStorage.getItem('diary_ghOwner');
+      const repo = document.getElementById('ghRepo').value || localStorage.getItem('diary_ghRepo');
+      const branch = document.getElementById('ghBranch').value || localStorage.getItem('diary_ghBranch') || 'main';
+
+      if (!token || !owner || !repo) {
+        showStatus('请先在设置中配置 GitHub 信息', 'error');
+        document.getElementById('settingsPanel').setAttribute('open', '');
+        return;
+      }
+
+      const date = document.getElementById('entryDate').value;
+      const title = document.getElementById('entryTitle').value;
+      const tags = document.getElementById('entryTags').value;
+      const summary = document.getElementById('entrySummary').value;
+      const content = document.getElementById('entryContent').value;
+
+      if (!date || !title || !content) {
+        showStatus('请填写日期、标题和正文', 'error');
+        return;
+      }
+
+      showStatus('正在发布…', 'info');
+
+      try {
+        const bodyHTML = markdownToHTML(content);
+        const fullHTML = generateEntryHTML(date, title, tags, summary, bodyHTML);
+        const fileName = `${date}.html`;
+        const filePath = `public/entries/${fileName}`;
+        const apiBase = `https://api.github.com/repos/${owner}/${repo}/contents`;
+        const headers = {
+          'Authorization': `token ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json'
+        };
+
+        // Step 1: Upload the entry HTML file
+        // Check if file exists (to get SHA for update)
+        let sha = null;
+        try {
+          const existing = await fetch(`${apiBase}/${filePath}?ref=${branch}`, { headers });
+          if (existing.ok) {
+            const data = await existing.json();
+            sha = data.sha;
+          }
+        } catch(e) { /* file doesn't exist yet, fine */ }
+
+        const entryPayload = {
+          message: `diary: add ${date} - ${title}`,
+          content: btoa(unescape(encodeURIComponent(fullHTML))),
+          branch: branch
+        };
+        if (sha) entryPayload.sha = sha;
+
+        const entryResp = await fetch(`${apiBase}/${filePath}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(entryPayload)
+        });
+
+        if (!entryResp.ok) {
+          const err = await entryResp.json();
+          throw new Error(`上传日记文件失败: ${err.message}`);
+        }
+
+        // Step 2: Update manifest.json
+        const manifestPath = 'public/entries/manifest.json';
+        let manifest = { site: { title: "LENNOX's Diary", description: "结构化每日复盘与成长记录", author: "LENNOX", language: "zh-CN" }, entries: [] };
+        let manifestSha = null;
+
+        try {
+          const mResp = await fetch(`${apiBase}/${manifestPath}?ref=${branch}`, { headers });
+          if (mResp.ok) {
+            const mData = await mResp.json();
+            manifestSha = mData.sha;
+            manifest = JSON.parse(decodeURIComponent(escape(atob(mData.content.replace(/\n/g, '')))));
+          }
+        } catch(e) { /* use default manifest */ }
+
+        const tagsArray = tags.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+        const newEntry = { date, title, file: fileName, tags: tagsArray, summary };
+
+        // Remove existing entry for same date if exists
+        manifest.entries = manifest.entries.filter(e => e.date !== date);
+        manifest.entries.push(newEntry);
+        // Sort newest first
+        manifest.entries.sort((a, b) => b.date.localeCompare(a.date));
+
+        const manifestPayload = {
+          message: `diary: update manifest for ${date}`,
+          content: btoa(unescape(encodeURIComponent(JSON.stringify(manifest, null, 2)))),
+          branch: branch
+        };
+        if (manifestSha) manifestPayload.sha = manifestSha;
+
+        const mUpdateResp = await fetch(`${apiBase}/${manifestPath}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(manifestPayload)
+        });
+
+        if (!mUpdateResp.ok) {
+          const err = await mUpdateResp.json();
+          throw new Error(`更新 manifest 失败: ${err.message}`);
+        }
+
+        showStatus(`✓ 发布成功！${date} 的日记已提交到 GitHub。Wasmer 将自动重新部署。`, 'success');
+
+      } catch (err) {
+        showStatus(`✗ 发布失败: ${err.message}`, 'error');
+        console.error(err);
+      }
+    }
+
+    // ========================================
+    // Status message helper
+    // ========================================
+    function showStatus(msg, type) {
+      const el = document.getElementById('statusMsg');
+      el.textContent = msg;
+      el.className = 'status-msg ' + type;
+    }
+  </script>
+
+</body>
+</html>

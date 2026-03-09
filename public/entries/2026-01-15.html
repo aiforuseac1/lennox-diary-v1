@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2026-01-15 — 电子书阅读笔记核心功能落地：注意力切换、复盘断档与工具链问题 — LENNOX's Diary</title>
+  <meta name="description" content="AI Studio 模型差异与部署验证思路；等待型任务制造注意力碎片化的结构性发现；晚间意志力耗尽与回避机制。">
+  <meta name="keywords" content="阅读器核心功能完成, 等待导致碎片化, 注意力切换, AIStudio问题, 部署验证, Token无效, 复盘断档, 提醒系统, 成绩牵引, 晚间回避, 采样频率">
+  <meta name="author" content="LENNOX">
+  <meta name="robots" content="index, follow">
+
+  <!-- Schema.org BlogPosting - AI crawlers will parse this -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "电子书阅读笔记核心功能落地：注意力切换、复盘断档与工具链问题",
+    "datePublished": "2026-01-15",
+    "author": { "@type": "Person", "name": "LENNOX" },
+    "keywords": ["阅读器核心功能完成","等待导致碎片化","注意力切换","AIStudio问题","部署验证","复盘断档","晚间回避","采样频率"],
+    "inLanguage": "zh-CN",
+    "description": "AI Studio 模型差异与部署验证思路；等待型任务制造注意力碎片化的结构性发现；晚间意志力耗尽与回避机制。"
+  }
+  </script>
+
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="inner">
+      <a href="/" class="site-title">LENNOX<span>'s</span> Diary</a>
+      <nav class="site-nav">
+        <a href="/">日记</a>
+        <a href="/editor.html">写日记</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="content-wrapper">
+    <a href="/" class="back-link">← 返回日记列表</a>
+
+    <article itemscope itemtype="https://schema.org/BlogPosting">
+      <header class="article-header">
+        <time class="entry-date" itemprop="datePublished" datetime="2026-01-15">2026-01-15</time>
+        <h1 class="article-title" itemprop="headline">电子书阅读笔记核心功能落地：注意力切换、复盘断档与工具链问题</h1>
+        <div class="article-meta-tags">
+          <span class="tag" itemprop="keywords">阅读器核心功能完成</span>
+          <span class="tag" itemprop="keywords">等待导致碎片化</span>
+          <span class="tag" itemprop="keywords">注意力切换</span>
+          <span class="tag" itemprop="keywords">AIStudio问题</span>
+          <span class="tag" itemprop="keywords">部署验证</span>
+          <span class="tag" itemprop="keywords">复盘断档</span>
+          <span class="tag" itemprop="keywords">晚间回避</span>
+          <span class="tag" itemprop="keywords">采样频率</span>
+        </div>
+        <meta itemprop="author" content="LENNOX">
+      </header>
+
+      <div class="article-body" itemprop="articleBody">
+
+        <h2>0）元信息</h2>
+        <ul>
+          <li><strong>原始发生日期</strong>：2026-01-15</li>
+          <li><strong>复盘录音时间</strong>：次日早上复盘</li>
+          <li><strong>补丁来源</strong>：主体内容为 All1-3 录音转写；补丁-01（用户后补充）：Spark Note AI "时间长/数量多就弄不动"的解决方案——<strong>降低采样频率</strong>（已决定采纳，AI Studio 抽风尚未验证可行性，待验证）</li>
+          <li><strong>主题关键词</strong>：#电子书阅读器 #笔记功能落地 #AIStudio #模型差异 #部署验证 #Token无效bug #注意力切换 #等待导致碎片化 #复盘断档 #提醒系统 #成绩牵引 #晚间意志力耗尽 #会议错过 #赛博朋克 #采样频率</li>
+        </ul>
+
+        <div class="section-divider">· · ·</div>
+
+        <h2>1）整理后的全文</h2>
+
+        <p>昨天我又忘了复盘，不过今天早上想起来就补上，问题不大，关键是"想起来就做"，别把"忘了"升级成自责；错了不等于死了，想办法改正就行。回到昨天本身：我先记几个灵感/观察。第一，做 AI app 的时候，我发现 AI Studio 里用来"解代码/改代码"的模型，有时反而不如外面通用模型好用；如果一个问题卡很久，可能不是我不行，而是模型不对，这时候可以换 ChatGPT 或换别的模型/地方去解决。第二，有些问题可能也不是代码，而是 AI Studio 的调试/运行机制导致的，比如我遇到过"会跳弹窗"的问题，其实你只要部署就能解决；所以卡太久时，别只在本地改，可以直接部署试试看验证。第三，我还遇到一个明显像 AI Studio 自己的问题：API 相关明明部署成功、在 Cloudflare 访问也能用，但 AI Studio 里却提示"令牌无效"，这块我还没搞明白，先记下来以后再严谨排查。</p>
+
+        <p>我也再次意识到"注意力记录/注意力笔记"本身还可以再简化：很多时候我已经意识到自己在浪费时间、或者不够专注了，我马上就会转变，但转变那一瞬间，前面到底怎么浪费的、浪费在什么细节上，其实已经溜走了；如果记录流程太复杂，就更难补回当时的真实情况。与此同时，做 AI APP 需要等待（等 AI 回答、等调试、等部署），这会让注意力天然变得频繁切换、变得更碎，这个状态我觉得是不对的，后面要想办法解决。</p>
+
+        <p>昨天晚上我还出现了一个很典型的问题：虽然很多东西最后做成了，但一旦后面又出问题，我就突然不想动了，像是意志力耗尽；尤其到晚上八九点经常出现这种"开始回避/开始逃避"的感觉。我也吐槽自己：你下次就设闹钟，设多个提醒；而且之前留的语音笔记本一直没转录，也得想办法推进。总之，别把"没做到"当成审判，还是那句话：错了不等于死了，想办法补救。</p>
+
+        <p>成绩这块，昨天又出成绩了。我也在调整看待方式：到了大学，成绩固然重要，但不必死盯那一点点；保持一个大致不错的位置（比如前 10%/8%/5%）就够了，更重要的是多元发展——毕竟我在学习之余也做了很多有意义的事。另外，自学的事情也该提上进度，比如六级之类。最近这几天出成绩，注意力确实会被牵着走，但我也提醒自己别找借口：早知道晚知道没区别，成绩又改不了，以后可以定时看，不要随时被拉走。</p>
+
+        <p>小确幸方面，昨天最大的一个是：我终于把"最基础版、最核心的电子书阅读 + 笔记"做成功了，这一点挺让人欣慰。遗憾也有：现代艺术排名被拉后了几名（整体仍不错，但还是不爽）；还有一个更实际的遗憾是，本来说要参加一个新加坡国立大学相关项目（重庆研究院 3+1+1 平和培养计划）的会议，结果我忘了（我把 7 点钟记错了），没参加上，这个确实挺遗憾，后面看看能不能补救。</p>
+
+        <p>最后补充一个工具链的进展点（补丁）：之前我提到 Spark Note AI 笔记随着时间长/数量多会"弄不动"，现在已经有一个可能的解决方案：把采样频率调小一点。昨天 AI 提出这个方案，我觉得合理，也决定采纳；但后来 AI Studio 抽风了，所以还没验证这招是否真的可行——我倾向它是可行的，后面找机会把"可行性"验证掉。</p>
+
+        <blockquote>
+          <p>"如果一个问题卡很久，可能是模型的问题；也可能是调试机制的问题，直接部署试试看。"</p>
+          <p>"注意力老是被切来切去……等待会导致频繁切换，注意力更碎，这不对。"</p>
+          <p>"错了不等于死了，想办法改正；下次设闹钟，多设几个提醒。"</p>
+        </blockquote>
+
+        <div class="section-divider">· · ·</div>
+
+        <h2>2）快速捡起版</h2>
+
+        <h3>2.1 今日时间线</h3>
+        <ul>
+          <li><strong>07:30 左右</strong> 起床、吃饭洗漱</li>
+          <li><strong>08:30</strong> 开始主线工作（持续约 189 分钟，接近 3 小时）</li>
+          <li><strong>中午</strong> 吃饭（约 1 小时）+ 出成绩引发一段分心</li>
+          <li><strong>午后</strong> 被收割/刷短视频等（约 1.1 小时）→ 回到主线继续做（约 2.7 小时）</li>
+          <li><strong>晚饭后</strong> 注意力切换更频繁（家里干扰/需要被叫去做事等）</li>
+          <li><strong>18:00-20:30</strong> "创造"但水分偏重（含币安直播/主要在调语音相关问题；AI Studio 抽风）</li>
+          <li><strong>20:30 后</strong> 明显不想动 → 打《赛博朋克》等被收割（约 2.8 小时）</li>
+          <li><strong>复盘</strong>：今天早上把昨天补复盘</li>
+        </ul>
+
+        <h3>2.2 灵感</h3>
+        <ul>
+          <li>AI Studio 内"解代码模型"不一定最强：卡很久就<strong>换模型/换平台</strong>（ChatGPT 等）</li>
+          <li>卡很久可能是调试机制：<strong>直接部署验证</strong>（某些弹窗问题部署后消失）</li>
+          <li>AI Studio "令牌无效"但 Cloudflare 可用：记录为<strong>平台侧疑难</strong>，后续排查</li>
+          <li><strong>补丁（用户补充）</strong>：Spark Note AI 卡顿可能靠"降低采样频率"解决（待验证）</li>
+        </ul>
+
+        <h3>2.3 问题</h3>
+        <ul>
+          <li>注意力频繁切换、碎片化：与"等待 AI"以及"被叫去做事/环境干扰"相关</li>
+          <li>晚上八九点后容易意志力耗尽 → 开始回避/逃避（出问题就不想动）</li>
+          <li>复盘断档：连续两天都是"次日早上补"，需要提醒系统加固</li>
+          <li>语音笔记本一直没转录：积压风险</li>
+          <li>出成绩期间注意力被牵引：需要"定时查看"而不是随时刷新</li>
+          <li>会议错过（时间记错/没参加）：需要补救路径</li>
+        </ul>
+
+        <h3>2.4 小确幸</h3>
+        <ul>
+          <li>电子书阅读器"最基础版核心功能（阅读+笔记）"终于做成功</li>
+          <li>对成绩的看待方式在升级：从死磕分数转向"多元发展 + 稳定区间"</li>
+        </ul>
+
+        <div class="section-divider">· · ·</div>
+
+        <h2>3）洞察卡（Insight Cards）</h2>
+
+        <div class="insight-card" data-insight-id="01">
+          <h3>Insight-01｜"等待型任务"天然制造注意力碎片化，需要被当成结构性问题</h3>
+          <p class="structure"><strong>结构</strong>：等 AI/等调试/等部署 → 注意力被迫切换 → 变碎 → 效率下降</p>
+          <p class="key-point"><strong>关键点</strong>：不是"我不专注"，而是任务形态本身在推我切换。</p>
+          <p class="conclusion"><strong>后果</strong>：越到晚上越累，越容易放弃/逃避。</p>
+        </div>
+
+        <div class="insight-card" data-insight-id="02">
+          <h3>Insight-02｜卡住时的第一判断：是"模型不行"还是"调试机制不行"</h3>
+          <p class="structure"><strong>结构</strong>：卡很久 → 可能模型弱（换模型）/可能调试链路问题（部署验证）</p>
+          <p class="conclusion"><strong>关键点</strong>：把"换工具/换验证方式"当成常规动作，会减少无效消耗。</p>
+        </div>
+
+        <div class="insight-card" data-insight-id="03">
+          <h3>Insight-03｜晚间意志力耗尽是"回避"的高发窗口</h3>
+          <p class="structure"><strong>结构</strong>：晚上 8-9 点后出问题 → 不想动 → 回避 → 游戏/短视频补偿</p>
+          <p class="conclusion"><strong>结论</strong>：你需要处理的不是"能不能做"，而是"晚间出问题时能不能继续推进一点点"。</p>
+        </div>
+
+        <div class="insight-card" data-insight-id="04">
+          <h3>Insight-04｜成绩牵引需要被"制度化"处理：定时看，而非随时刷</h3>
+          <p class="structure"><strong>结构</strong>：出成绩 → 注意力被拉走 → 频繁查看 → 主线纯度下降</p>
+          <p class="conclusion"><strong>结论</strong>：把查看成绩改成固定窗口，会显著减少漂移。</p>
+        </div>
+
+        <div class="insight-card" data-insight-id="05">
+          <h3>Insight-05｜Spark Note AI 的"采样频率"可能是性能瓶颈的关键旋钮（待验证）</h3>
+          <p class="structure"><strong>结构</strong>：时间长/数量多 → 弄不动 → 尝试降低采样频率 → 等待验证</p>
+          <p class="conclusion"><strong>结论</strong>：把"可行性验证"作为下一次的明确小目标，才能让方案从想法变资产。（补丁）</p>
+        </div>
+
+        <div class="section-divider">· · ·</div>
+
+        <h2>4）落地点</h2>
+
+        <h3>4.1 用户原生提取</h3>
+        <ul>
+          <li>卡太久可能是模型问题：换 ChatGPT/换模型；也可能是调试机制问题：部署验证</li>
+          <li>注意力记录流程可再简化；等待导致注意力切换频繁、变碎，需要解决</li>
+          <li>晚间容易"出问题就不想动"，像意志力耗尽/回避</li>
+          <li>复盘容易断档：下次设闹钟、多设提醒；语音笔记本别再积压</li>
+          <li>成绩观念调整：追求多元发展；自学（六级等）要提上进度；成绩查看要定时化</li>
+          <li>小确幸：阅读器最核心基础功能做成</li>
+          <li>遗憾：会议错过（时间记错），考虑补救</li>
+          <li><strong>补丁（用户补充）</strong>：Spark Note AI 卡顿方案=降低采样频率；已采纳意向，待验证</li>
+        </ul>
+
+        <h3>4.2 助手建议</h3>
+        <ul>
+          <li><strong>助手建议</strong>：你提到"采样频率调小"后还没验证——建议把"验证"写成一个极小闭环：只验证两件事即可（是否不再卡死；生成/导出是否仍可用）。验证过，后续才值得投入更大改动。</li>
+          <li><strong>助手建议</strong>：你已经识别出"晚间出问题就不想动"是高频窗口；建议你在 diary 里给这个窗口一个固定标记（例如"20:30 后回避风险↑"），后续几天连续对照，会更容易找到触发条件。</li>
+        </ul>
+
+        <div class="section-divider">· · ·</div>
+
+        <h2>5）归档与关联</h2>
+        <ul>
+          <li><strong>索引编号</strong>：DIARY-20260115-001</li>
+          <li><strong>关联标签</strong>：#阅读器核心功能完成 #等待导致碎片化 #注意力切换 #AIStudio问题 #部署验证 #Token无效 #复盘断档 #提醒系统 #成绩牵引 #晚间回避 #采样频率</li>
+        </ul>
+
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    LENNOX's Diary · Hosted on Wasmer Edge
+  </footer>
+
+</body>
+</html>

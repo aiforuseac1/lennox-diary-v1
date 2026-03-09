@@ -1,0 +1,19 @@
+[package]
+name = "your-username/lennox-diary"
+version = "0.1.0"
+description = "LENNOX's structured daily diary - AI-accessible personal blog"
+
+[dependencies]
+"sharrattj/static-web-server" = "1"
+
+[fs]
+public = "public"
+settings = "settings"
+
+[[command]]
+name = "script"
+module = "sharrattj/static-web-server:webserver"
+runner = "https://webc.org/runner/wasi"
+
+[command.annotations.wasi]
+main-args = ["-w", "/settings/config.toml"]

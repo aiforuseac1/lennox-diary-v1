@@ -1,0 +1,4 @@
+kind: wasmer.io/App.v0
+name: lennox-diary
+owner: your-username
+package: your-username/lennox-diary
